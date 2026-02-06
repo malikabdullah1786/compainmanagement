@@ -6,7 +6,7 @@ from datetime import datetime
 
 from database import get_db
 from models.schemas import Campaign, CampaignCreate, CampaignUpdate, CampaignPreview, Customer
-from services.campaign_service import send_campaign, get_campaign_recipients
+from services.campaign_service import send_campaign, get_campaign_recipients, cancel_campaign_messages
 
 router = APIRouter()
 
@@ -34,10 +34,23 @@ async def create_campaign(
     data = campaign.model_dump()
     data["status"] = "draft"
     
-    result = db.table("campaigns").insert(data).execute()
+    # Properly serialize all fields for JSON/Supabase compatibility
+    serialized_data = {}
+    for key, value in data.items():
+        if value is None:
+            continue  # Skip None values - let database use defaults
+        elif isinstance(value, UUID):
+            serialized_data[key] = str(value)
+        elif isinstance(value, datetime):
+            serialized_data[key] = value.isoformat()
+        else:
+            serialized_data[key] = value
+    
+    result = db.table("campaigns").insert(serialized_data).execute()
     if not result.data:
         raise HTTPException(status_code=400, detail="Failed to create campaign")
     return result.data[0]
+
 
 
 @router.get("/{campaign_id}", response_model=Campaign)
@@ -80,13 +93,18 @@ async def delete_campaign(
     campaign_id: UUID,
     db: Client = Depends(get_db)
 ):
-    """Delete a campaign (only if draft)."""
+    """Delete a campaign (if draft, or scheduled - cancels messages)."""
     existing = db.table("campaigns").select("status").eq("id", str(campaign_id)).execute()
     if not existing.data:
         raise HTTPException(status_code=404, detail="Campaign not found")
     
-    if existing.data[0]["status"] != "draft":
-        raise HTTPException(status_code=400, detail="Can only delete draft campaigns")
+    status = existing.data[0]["status"]
+    if status not in ["draft", "scheduled", "cancelled", "failed"]:
+        raise HTTPException(status_code=400, detail=f"Cannot delete campaign in status: {status}")
+    
+    # If scheduled, try to cancel messages in Twilio
+    if status == "scheduled":
+        await cancel_campaign_messages(str(campaign_id), db)
     
     db.table("campaigns").delete().eq("id", str(campaign_id)).execute()
     return {"message": "Campaign deleted"}
@@ -150,7 +168,7 @@ async def send_campaign_endpoint(
 
 
 @router.post("/{campaign_id}/cancel")
-async def cancel_campaign(
+async def cancel_campaign_endpoint(
     campaign_id: UUID,
     db: Client = Depends(get_db)
 ):
@@ -162,8 +180,10 @@ async def cancel_campaign(
     if campaign.data[0]["status"] != "scheduled":
         raise HTTPException(status_code=400, detail="Can only cancel scheduled campaigns")
     
-    # TODO: Cancel individual Twilio scheduled messages
-    # For now, just update status
+    # Cancel individual Twilio scheduled messages
+    await cancel_campaign_messages(str(campaign_id), db)
+    
+    # Update status
     db.table("campaigns").update({"status": "cancelled"}).eq("id", str(campaign_id)).execute()
     
     return {"message": "Campaign cancelled"}

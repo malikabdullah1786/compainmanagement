@@ -37,13 +37,47 @@ async def create_customer(
     db: Client = Depends(get_db)
 ):
     """Create a new customer."""
-    data = customer.model_dump()
-    data["opt_in_date"] = datetime.utcnow().isoformat()
-    
-    result = db.table("customers").insert(data).execute()
-    if not result.data:
-        raise HTTPException(status_code=400, detail="Failed to create customer")
-    return result.data[0]
+    try:
+        data = customer.model_dump()
+        
+        # Serialize UUID fields to strings for JSON compatibility
+        if isinstance(data.get("restaurant_id"), UUID):
+            data["restaurant_id"] = str(data["restaurant_id"])
+        
+        # Verify restaurant exists
+        restaurant_id = data.get("restaurant_id")
+        restaurant = db.table("restaurants").select("id").eq("id", restaurant_id).execute()
+        if not restaurant.data:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Restaurant not found. Please ensure your account is properly set up."
+            )
+        
+        # Map schema field names to database column names
+        if "custom_attributes" in data:
+            data["custom_fields"] = data.pop("custom_attributes")
+        
+        # Remove None values to let database use defaults
+        data = {k: v for k, v in data.items() if v is not None}
+        
+        # Ensure required fields
+        if "opt_in_status" not in data:
+            data["opt_in_status"] = "opted_in"
+        
+        # Ensure tags is a list, not None
+        if "tags" not in data or data.get("tags") is None:
+            data["tags"] = []
+        
+        result = db.table("customers").insert(data).execute()
+        if not result.data:
+            raise HTTPException(status_code=400, detail="Failed to create customer - no data returned")
+        return result.data[0]
+    except HTTPException:
+        raise
+    except Exception as e:
+        # Log the actual error for debugging
+        print(f"Customer creation error: {type(e).__name__}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to create customer: {str(e)}")
 
 
 @router.get("/{customer_id}", response_model=Customer)
@@ -65,18 +99,33 @@ async def update_customer(
     db: Client = Depends(get_db)
 ):
     """Update a customer."""
-    update_data = customer.model_dump(exclude_unset=True)
-    if not update_data:
-        raise HTTPException(status_code=400, detail="No fields to update")
-    
-    # Handle opt-out
-    if update_data.get("opt_in_status") == "opted_out":
-        update_data["opt_out_date"] = datetime.utcnow().isoformat()
-    
-    result = db.table("customers").update(update_data).eq("id", str(customer_id)).execute()
-    if not result.data:
-        raise HTTPException(status_code=404, detail="Customer not found")
-    return result.data[0]
+    try:
+        update_data = customer.model_dump(exclude_unset=True)
+        if not update_data:
+            raise HTTPException(status_code=400, detail="No fields to update")
+        
+        # Map schema field names to database column names
+        if "custom_attributes" in update_data:
+            update_data["custom_fields"] = update_data.pop("custom_attributes")
+        
+        # Handle opt-out
+        if update_data.get("opt_in_status") == "opted_out":
+            update_data["opt_out_date"] = datetime.utcnow().isoformat()
+        elif update_data.get("opt_in_status") == "opted_in":
+            update_data["opt_out_date"] = None
+        
+        # Set updated_at
+        update_data["updated_at"] = datetime.utcnow().isoformat()
+        
+        result = db.table("customers").update(update_data).eq("id", str(customer_id)).execute()
+        if not result.data:
+            raise HTTPException(status_code=404, detail="Customer not found")
+        return result.data[0]
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Customer update error: {type(e).__name__}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to update customer: {str(e)}")
 
 
 @router.delete("/{customer_id}")

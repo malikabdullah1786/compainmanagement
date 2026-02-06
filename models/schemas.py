@@ -86,9 +86,11 @@ class CustomerBase(BaseModel):
 
 class CustomerCreate(CustomerBase):
     restaurant_id: UUID
+    opt_in_status: str = "opted_in"
 
 
 class CustomerUpdate(BaseModel):
+    phone: Optional[str] = None
     first_name: Optional[str] = None
     last_name: Optional[str] = None
     email: Optional[str] = None

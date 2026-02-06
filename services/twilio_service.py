@@ -1,5 +1,5 @@
 from twilio.rest import Client
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from config import get_settings
@@ -22,12 +22,17 @@ def send_scheduled_message(
     Uses scheduleType="fixed" and sendAt parameter.
     Messages can be scheduled 15 minutes to 35 days in advance.
     """
+    # Ensure send_at is timezone-aware (Twilio requires UTC)
+    if send_at.tzinfo is None:
+        # Assume UTC if no timezone provided
+        send_at = send_at.replace(tzinfo=timezone.utc)
+    
     params = {
         "messaging_service_sid": messaging_service_sid,
         "to": to,
         "body": body,
         "schedule_type": "fixed",
-        "send_at": send_at.isoformat(),
+        "send_at": send_at,  # Pass datetime object directly, Twilio SDK handles conversion
     }
     
     if status_callback:

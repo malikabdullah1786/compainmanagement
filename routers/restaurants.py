@@ -97,3 +97,72 @@ async def get_restaurant_messages(
     """Get SMS messages for a restaurant."""
     result = db.table("sms_messages").select("*").eq("restaurant_id", str(restaurant_id)).order("created_at", desc=True).limit(limit).execute()
     return result.data
+
+
+@router.get("/{restaurant_id}/stats")
+async def get_restaurant_stats(
+    restaurant_id: UUID,
+    db: Client = Depends(get_db)
+):
+    """Get statistics for a restaurant's SMS marketing performance."""
+    # Get customer counts
+    customers_result = db.table("customers").select("opt_in_status").eq("restaurant_id", str(restaurant_id)).execute()
+    customers = customers_result.data or []
+    
+    total_customers = len(customers)
+    opted_in = sum(1 for c in customers if c.get("opt_in_status") == "opted_in")
+    opted_out = sum(1 for c in customers if c.get("opt_in_status") == "opted_out")
+    
+    # Get campaign counts
+    campaigns_result = db.table("campaigns").select("status, total_sent, total_delivered, total_cost").eq("restaurant_id", str(restaurant_id)).execute()
+    campaigns = campaigns_result.data or []
+    
+    total_campaigns = len(campaigns)
+    sent_campaigns = sum(1 for c in campaigns if c.get("status") == "sent")
+    scheduled_campaigns = sum(1 for c in campaigns if c.get("status") == "scheduled")
+    
+    # Aggregate message stats
+    total_sent = sum(c.get("total_sent", 0) or 0 for c in campaigns)
+    total_delivered = sum(c.get("total_delivered", 0) or 0 for c in campaigns)
+    total_cost = sum(c.get("total_cost", 0) or 0 for c in campaigns)
+    
+    delivery_rate = round((total_delivered / total_sent * 100) if total_sent > 0 else 0, 1)
+    
+    return {
+        "customers": {
+            "total": total_customers,
+            "opted_in": opted_in,
+            "opted_out": opted_out,
+        },
+        "campaigns": {
+            "total": total_campaigns,
+            "sent": sent_campaigns,
+            "scheduled": scheduled_campaigns,
+        },
+        "messages": {
+            "total_sent": total_sent,
+            "total_delivered": total_delivered,
+            "delivery_rate": delivery_rate,
+        },
+        "cost": {
+            "total": round(total_cost, 2),
+        }
+    }
+
+
+@router.get("/{restaurant_id}/tags")
+async def get_restaurant_tags(
+    restaurant_id: UUID,
+    db: Client = Depends(get_db)
+):
+    """Get all unique customer tags for a restaurant."""
+    result = db.table("customers").select("tags").eq("restaurant_id", str(restaurant_id)).execute()
+    
+    # Extract unique tags
+    all_tags = set()
+    for customer in result.data or []:
+        tags = customer.get("tags") or []
+        all_tags.update(tags)
+    
+    return sorted(list(all_tags))
+

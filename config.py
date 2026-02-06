@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     twilio_account_sid: str
     twilio_auth_token: str
     twilio_messaging_service_sid: str = ""
+    twilio_phone_number: str = ""  # Direct phone number (use this if messaging service fails)
     
     # API
     api_base_url: str = "http://localhost:8000"
