@@ -220,42 +220,19 @@ export default function AdminDashboardPage() {
     )
 
     return (
-        <div className="min-h-screen bg-background">
-            {/* Header */}
-            <header className="border-b border-border bg-card/50 backdrop-blur-xl sticky top-0 z-50">
-                <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-gradient-to-br from-red-500 to-orange-600 rounded-lg flex items-center justify-center">
-                            <Shield className="w-5 h-5 text-white" />
-                        </div>
-                        <div>
-                            <h1 className="text-lg font-bold text-foreground">Admin Dashboard</h1>
-                            <p className="text-xs text-muted-foreground">User Approval Management</p>
-                        </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={loadUsers}
-                            disabled={isLoading}
-                            className="text-muted-foreground hover:text-foreground"
-                        >
-                            <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-                        </Button>
-                        <Button
-                            variant="ghost"
-                            onClick={handleLogout}
-                            className="text-muted-foreground hover:text-foreground"
-                        >
-                            <LogOut className="mr-2 h-4 w-4" />
-                            Logout
-                        </Button>
-                    </div>
+        <div className="space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div>
+                    <h2 className="text-2xl font-bold tracking-tight text-foreground">User Approvals</h2>
+                    <p className="text-muted-foreground">Manage and verify new signups.</p>
                 </div>
-            </header>
-
-            <main className="max-w-6xl mx-auto p-6 space-y-6">
+                <Button variant="outline" size="sm" onClick={loadUsers} disabled={isLoading}>
+                    <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+                    Refresh
+                </Button>
+            </div>
+            
+            <div className="space-y-6">
                 {/* Stats */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <Card className="bg-card border-border">
@@ -388,7 +365,7 @@ export default function AdminDashboardPage() {
                         </Tabs>
                     </CardContent>
                 </Card>
-            </main>
+            </div>
 
             {/* Confirmation Dialog */}
             <Dialog open={!!actionUser && !!actionType} onOpenChange={() => {

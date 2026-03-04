@@ -120,6 +120,16 @@ async def buy_phone_number(
         }
         db.table("restaurants").update(update_data).eq("id", request.restaurant_id).execute()
         
+        # Rollup spend to parent agency
+        agency_id = restaurant.get("agency_id")
+        if agency_id:
+            try:
+                all_rests = db.table("restaurants").select("current_spend_gbp").eq("agency_id", agency_id).execute()
+                total_agency_spend = sum(float(r.get("current_spend_gbp") or 0.0) for r in (all_rests.data or []))
+                db.table("agencies").update({"current_spend_gbp": total_agency_spend}).eq("id", agency_id).execute()
+            except Exception as e:
+                print(f"[WARN] Failed to rollup agency spend after number purchase: {e}")
+        
         # Create Transaction Ledger Entry
         db.table("transactions").insert({
             "restaurant_id": request.restaurant_id,

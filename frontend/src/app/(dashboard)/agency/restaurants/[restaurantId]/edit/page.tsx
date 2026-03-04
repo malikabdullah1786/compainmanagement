@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { ArrowLeft, Loader2, Building2, MapPin, Mail, Phone, Clock, DollarSign } from 'lucide-react'
 import { z } from 'zod'
 import { restaurantApi } from '@/lib/api'
-import { useRestaurant } from '@/lib/queries'
+import { useRestaurant, useAgency, useAgencyRestaurants } from '@/lib/queries'
 
 const timezones = [
     { value: 'America/New_York', label: 'Eastern Time (ET)' },
@@ -44,6 +44,14 @@ export default function EditRestaurantPage() {
 
     const [isSubmitting, setIsSubmitting] = useState(false)
     const { data: restaurant, isLoading } = useRestaurant(restaurantId)
+    const { data: agency } = useAgency(restaurant?.agency_id || '')
+    const { data: allAgencyRestaurants } = useAgencyRestaurants(restaurant?.agency_id || '')
+
+    const agencyTotalBudget = agency?.budget_monthly_gbp || 0
+    const otherRestaurantsAllocated = (allAgencyRestaurants || [])
+         .filter((r: any) => r.id !== restaurantId)
+         .reduce((sum: number, r: any) => sum + (r.budget_monthly_gbp || 0), 0)
+    const maxAvailableBudget = agencyTotalBudget - otherRestaurantsAllocated
 
     const {
         register,
@@ -62,6 +70,8 @@ export default function EditRestaurantPage() {
 
     const timezone = watch('timezone')
     const status = watch('status')
+    const currentBudgetInput = watch('budget_monthly_gbp') || '0'
+    const isBudgetExceeded = agencyTotalBudget > 0 && parseFloat(currentBudgetInput) > maxAvailableBudget
 
     // Pre-fill form
     useEffect(() => {
@@ -192,13 +202,19 @@ export default function EditRestaurantPage() {
                         </div>
 
                         <div className="space-y-2 pt-2">
-                            <Label htmlFor="spending_limit">Monthly Budget (€)</Label>
+                            <Label htmlFor="spending_limit">Monthly Budget (£)</Label>
                             <Input
                                 id="spending_limit"
                                 type="number"
                                 placeholder="e.g., 500"
                                 {...register('budget_monthly_gbp')}
+                                className={isBudgetExceeded ? 'border-red-500 focus-visible:ring-red-500' : ''}
                             />
+                            {agencyTotalBudget > 0 && (
+                                <p className={`text-sm ${isBudgetExceeded ? 'text-red-500 font-medium' : 'text-muted-foreground'}`}>
+                                    Available Agency Budget to Allocate: £{Math.max(0, maxAvailableBudget).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits:2})}
+                                </p>
+                            )}
                         </div>
                     </CardContent>
                 </Card>

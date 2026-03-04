@@ -1,6 +1,5 @@
 'use client'
 
-import { useAuth } from '@/contexts/auth-context'
 import { useQuery } from '@tanstack/react-query'
 import { transactionApi } from '@/lib/api'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -14,16 +13,13 @@ const txTypeColors: Record<string, string> = {
     number_purchase: 'bg-violet-500/10 text-violet-500 border-violet-500/20',
 }
 
-export default function RestaurantTransactionsPage() {
-    const { restaurantId } = useAuth()
-
+export default function AdminTransactionsPage() {
     const { data: transactions = [], isLoading } = useQuery({
-        queryKey: ['restaurant-transactions', restaurantId],
+        queryKey: ['admin-all-transactions'],
         queryFn: async () => {
-            const { data } = await transactionApi.getRestaurantTransactions(restaurantId!)
+            const { data } = await transactionApi.getAllTransactions()
             return data
-        },
-        enabled: !!restaurantId
+        }
     })
 
     if (isLoading) return (
@@ -35,14 +31,14 @@ export default function RestaurantTransactionsPage() {
     return (
         <div className="space-y-6">
             <div>
-                <h1 className="text-2xl font-bold text-foreground">Transaction History</h1>
-                <p className="text-muted-foreground mt-1">All billing events for your account</p>
+                <h1 className="text-2xl font-bold text-foreground">Global Transaction Ledger</h1>
+                <p className="text-muted-foreground mt-1">All billing events across agencies and restaurants</p>
             </div>
 
             <Card className="bg-card border-border">
                 <CardHeader>
-                    <CardTitle className="text-foreground">Ledger</CardTitle>
-                    <CardDescription className="text-muted-foreground">{transactions.length} transaction{transactions.length !== 1 ? 's' : ''} found</CardDescription>
+                    <CardTitle className="text-foreground">All Transactions</CardTitle>
+                    <CardDescription className="text-muted-foreground">{transactions.length} transaction{transactions.length !== 1 ? 's' : ''} total</CardDescription>
                 </CardHeader>
                 <CardContent>
                     <div className="overflow-x-auto">
@@ -50,6 +46,7 @@ export default function RestaurantTransactionsPage() {
                             <thead>
                                 <tr className="border-b border-border">
                                     <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Date</th>
+                                    <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Entity</th>
                                     <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Type</th>
                                     <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Description</th>
                                     <th className="text-right py-3 px-4 text-sm font-medium text-muted-foreground">Amount (£)</th>
@@ -58,9 +55,9 @@ export default function RestaurantTransactionsPage() {
                             <tbody>
                                 {transactions.length === 0 ? (
                                     <tr>
-                                        <td colSpan={4} className="py-12 text-center">
+                                        <td colSpan={5} className="py-12 text-center">
                                             <Receipt className="mx-auto h-10 w-10 text-muted-foreground mb-2" />
-                                            <p className="text-muted-foreground">No transactions yet.</p>
+                                            <p className="text-muted-foreground">No transactions recorded yet.</p>
                                         </td>
                                     </tr>
                                 ) : (
@@ -68,6 +65,13 @@ export default function RestaurantTransactionsPage() {
                                         <tr key={tx.id} className="border-b border-border hover:bg-muted/50">
                                             <td className="py-3 px-4 text-sm text-foreground">
                                                 {format(new Date(tx.created_at), 'MMM d, yyyy h:mm a')}
+                                            </td>
+                                            <td className="py-3 px-4 text-sm">
+                                                {tx.agency_id && !tx.restaurant_id ? (
+                                                    <Badge variant="outline" className="bg-amber-500/10 text-amber-500 border-amber-500/20">Agency</Badge>
+                                                ) : (
+                                                    <Badge variant="outline" className="bg-indigo-500/10 text-indigo-500 border-indigo-500/20">Restaurant</Badge>
+                                                )}
                                             </td>
                                             <td className="py-3 px-4">
                                                 <Badge variant="outline" className={txTypeColors[tx.transaction_type] || 'bg-muted'}>

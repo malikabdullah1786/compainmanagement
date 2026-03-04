@@ -91,6 +91,20 @@ def increment_usage(db: Client, restaurant_id: str, metric: str, cost: float = 0
                     "current_spend_gbp": new_spend
                 }).eq("id", restaurant_id).execute()
                 
+                # Rollup to parent agency
+                agency_id = rest_data.get("agency_id")
+                if agency_id:
+                    try:
+                        # Re-sum all restaurants for this agency to get accurate total spend
+                        all_rests = db.table("restaurants").select("current_spend_gbp").eq("agency_id", agency_id).execute()
+                        total_agency_spend = sum(float(r.get("current_spend_gbp") or 0.0) for r in (all_rests.data or []))
+                        db.table("agencies").update({
+                            "current_spend_gbp": total_agency_spend
+                        }).eq("id", agency_id).execute()
+                        logger.info(f"Updated agency {agency_id} total spend to {total_agency_spend:.4f} GBP")
+                    except Exception as agency_err:
+                        logger.error(f"Failed to rollup agency spend for {agency_id}: {agency_err}")
+                
                 # Suspend subaccount if limit is exceeded
                 if budget > 0 and new_spend >= budget:
                     logger.warning(f"Budget exceeded for {restaurant_id}! Suspending subaccount.")

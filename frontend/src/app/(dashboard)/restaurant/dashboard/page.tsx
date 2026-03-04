@@ -17,7 +17,8 @@ import {
     CheckCircle2,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/auth-context'
-import { useCampaigns, useCustomers, useRestaurantStats, Campaign } from '@/lib/queries'
+import { useCampaigns, useCustomers, useRestaurantStats, useRestaurant, Campaign } from '@/lib/queries'
+import { GetPhoneNumberCard } from './components/get-phone-number-card'
 
 interface StatCardProps {
     title: string
@@ -63,6 +64,7 @@ export default function DashboardPage() {
     const { restaurantId, profile, isLoading: authLoading } = useAuth()
 
     // Fetch real data from API
+    const { data: restaurant, isLoading: restaurantLoading } = useRestaurant(restaurantId!)
     const { data: customers = [], isLoading: customersLoading } = useCustomers(restaurantId)
     const { data: campaigns = [], isLoading: campaignsLoading } = useCampaigns(restaurantId)
     const { data: stats, isLoading: statsLoading } = useRestaurantStats(restaurantId)
@@ -82,7 +84,7 @@ export default function DashboardPage() {
     // Recent campaigns (last 5)
     const recentCampaigns = campaigns.slice(0, 5)
 
-    const isLoading = authLoading || customersLoading || campaignsLoading
+    const isLoading = authLoading || customersLoading || campaignsLoading || restaurantLoading
 
     // Loading state
     if (isLoading) {
@@ -121,6 +123,11 @@ export default function DashboardPage() {
                     </Button>
                 </Link>
             </div>
+
+            {/* Check for Phone Number Setup */}
+            {restaurant && !restaurant.twilio_phone_number && (
+                <GetPhoneNumberCard restaurantId={restaurantId!} budget={restaurant.budget_monthly_gbp} spend={restaurant.current_spend_gbp} />
+            )}
 
             {/* Stats Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

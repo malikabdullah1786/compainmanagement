@@ -10,6 +10,7 @@ class AgencyBase(BaseModel):
     email: EmailStr
     phone: Optional[str] = None
     twilio_account_sid: Optional[str] = None
+    budget_monthly_gbp: Optional[float] = 0.0
 
 
 class AgencyCreate(AgencyBase):
@@ -22,12 +23,14 @@ class AgencyUpdate(BaseModel):
     phone: Optional[str] = None
     status: Optional[str] = None
     twilio_account_sid: Optional[str] = None
+    budget_monthly_gbp: Optional[float] = None
 
 
 class Agency(AgencyBase):
     id: UUID
     status: str
     twilio_account_sid: Optional[str] = None
+    current_spend_gbp: Optional[float] = 0.0
     created_at: datetime
     updated_at: datetime
 
@@ -229,15 +232,17 @@ class UsageRecord(BaseModel):
 # ============ Transactions ============
 class TransactionBase(BaseModel):
     amount_gbp: float
-    transaction_type: str
+    transaction_type: str  # 'budget_allocation', 'sms_charge', 'number_purchase', etc.
     description: Optional[str] = None
 
 class TransactionCreate(TransactionBase):
-    restaurant_id: UUID
+    restaurant_id: Optional[UUID] = None
+    agency_id: Optional[UUID] = None
 
 class Transaction(TransactionBase):
     id: UUID
-    restaurant_id: UUID
+    restaurant_id: Optional[UUID] = None
+    agency_id: Optional[UUID] = None
     created_at: datetime
     updated_at: datetime
 

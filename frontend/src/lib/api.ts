@@ -90,6 +90,7 @@ export const campaignApi = {
 export const transactionApi = {
     getRestaurantTransactions: (id: string) => api.get(`/transactions/${id}`),
     getAgencyTransactions: (id: string) => api.get(`/transactions/agency/${id}`),
+    getAllTransactions: () => api.get('/transactions/admin/all'),
 }
 
 export default api

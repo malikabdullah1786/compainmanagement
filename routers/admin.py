@@ -48,3 +48,30 @@ async def get_all_users(db: Client = Depends(get_db)):
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Error fetching users: {str(e)}")
+
+
+@router.post("/migrate-transactions")
+async def migrate_transactions(db: Client = Depends(get_db)):
+    """
+    One-time migration: add agency_id column to transactions table
+    and make restaurant_id nullable.
+    """
+    results = []
+    try:
+        # Add agency_id column
+        try:
+            db.rpc("exec_sql", {"sql": "ALTER TABLE transactions ADD COLUMN IF NOT EXISTS agency_id UUID REFERENCES agencies(id) ON DELETE CASCADE"}).execute()
+            results.append("agency_id column: OK")
+        except Exception as e1:
+            results.append(f"agency_id column: {str(e1)[:100]}")
+
+        # Make restaurant_id nullable
+        try:
+            db.rpc("exec_sql", {"sql": "ALTER TABLE transactions ALTER COLUMN restaurant_id DROP NOT NULL"}).execute()
+            results.append("restaurant_id nullable: OK")
+        except Exception as e2:
+            results.append(f"restaurant_id nullable: {str(e2)[:100]}")
+
+        return {"results": results}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

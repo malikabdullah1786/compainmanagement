@@ -38,7 +38,7 @@ import { cn } from '@/lib/utils'
 import { useRouter } from 'next/navigation'
 import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { useRestaurants } from '@/lib/queries'
+import { useAgencyRestaurants, useAgencies } from '@/lib/queries'
 import { restaurantApi } from '@/lib/api'
 import { createClient } from '@/lib/supabase/client'
 
@@ -56,7 +56,9 @@ export default function RestaurantsPage() {
     const [searchQuery, setSearchQuery] = useState('')
     const [isDeleting, setIsDeleting] = useState<string | null>(null)
 
-    const { data: restaurants, isLoading } = useRestaurants()
+    const { data: agencies } = useAgencies()
+    const agencyId = agencies?.[0]?.id
+    const { data: restaurants, isLoading } = useAgencyRestaurants(agencyId || '')
 
     const filteredRestaurants = (restaurants || []).filter((restaurant: any) =>
         restaurant.name.toLowerCase().includes(searchQuery.toLowerCase())

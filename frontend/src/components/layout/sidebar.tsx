@@ -57,6 +57,7 @@ const agencyNavItems: NavItem[] = [
     { title: 'Restaurants', href: '/agency/restaurants', icon: Building2 },
     { title: 'Analytics', href: '/agency/analytics', icon: BarChart3 },
     { title: 'Phone Numbers', href: '/agency/phone-numbers', icon: Phone },
+    { title: 'Transactions', href: '/agency/transactions', icon: CreditCard },
     { title: 'Settings', href: '/agency/settings', icon: Settings },
 ]
 

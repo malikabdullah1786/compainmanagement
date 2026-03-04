@@ -141,6 +141,18 @@ async def create_restaurant(
     restaurant_data['created_by_agency_id'] = str(restaurant.agency_id)
     restaurant_data['status'] = 'active'
     
+    # Enforce Agency budget limits
+    new_budget = float(restaurant_data.get('budget_monthly_gbp') or 0.0)
+    if new_budget > 0:
+        agency_id_str = str(restaurant.agency_id)
+        agency_res = db.table('agencies').select('budget_monthly_gbp').eq('id', agency_id_str).execute()
+        if agency_res.data:
+            agency_budget = float(agency_res.data[0].get('budget_monthly_gbp') or 0.0)
+            all_rests = db.table('restaurants').select('budget_monthly_gbp').eq('agency_id', agency_id_str).execute()
+            total_allocated = sum(float(r.get('budget_monthly_gbp') or 0.0) for r in (all_rests.data or []))
+            if total_allocated + new_budget > agency_budget:
+                raise HTTPException(status_code=400, detail=f"Cannot allocate budget. Agency total budget is {agency_budget} GBP but attempted total allocation is {total_allocated + new_budget} GBP.")
+    
     # Twilio Subaccount Generation
     try:
         twilio_acc = create_subaccount(friendly_name=f"Restaurant-{restaurant.name}")
@@ -166,6 +178,16 @@ async def create_restaurant(
             'transaction_type': 'budget_allocation',
             'description': 'Initial Monthly Budget Allocation'
         }).execute()
+
+    # Rollup allocated budget to agency's current_spend_gbp
+    # Agency current_spend = sum of ALL restaurant budget allocations (committed/reserved)
+    agency_id_str = str(restaurant.agency_id)
+    try:
+        all_rests = db.table('restaurants').select('budget_monthly_gbp').eq('agency_id', agency_id_str).execute()
+        total_committed = sum(float(r.get('budget_monthly_gbp') or 0.0) for r in (all_rests.data or []))
+        db.table('agencies').update({'current_spend_gbp': total_committed}).eq('id', agency_id_str).execute()
+    except Exception as e:
+        print(f"[WARN] Failed to rollup agency allocated spend: {e}")
 
     return new_restaurant
 
@@ -208,6 +230,23 @@ async def update_restaurant(
     if not update_data:
         raise HTTPException(status_code=400, detail='No fields to update')
     
+    # Enforce Agency budget limits
+    if 'budget_monthly_gbp' in update_data:
+        new_budget = float(update_data['budget_monthly_gbp'] or 0.0)
+        current_rest = db.table('restaurants').select('budget_monthly_gbp, agency_id, creation_type').eq('id', str(restaurant_id)).execute()
+        if current_rest.data:
+            old_budget = float(current_rest.data[0].get('budget_monthly_gbp') or 0.0)
+            agency_id_str = current_rest.data[0].get('agency_id')
+            # Only enforce on agency created
+            if new_budget != old_budget and agency_id_str and current_rest.data[0].get('creation_type') == 'agency_created':
+                agency_res = db.table('agencies').select('budget_monthly_gbp').eq('id', agency_id_str).execute()
+                if agency_res.data:
+                    agency_budget = float(agency_res.data[0].get('budget_monthly_gbp') or 0.0)
+                    all_rests = db.table('restaurants').select('budget_monthly_gbp').eq('agency_id', agency_id_str).eq('creation_type', 'agency_created').execute()
+                    total_allocated = sum(float(r.get('budget_monthly_gbp') or 0.0) for r in (all_rests.data or []))
+                    if (total_allocated - old_budget + new_budget) > agency_budget:
+                        raise HTTPException(status_code=400, detail=f"Cannot allocate budget. Agency total budget is {agency_budget} GBP but attempted total allocation is {total_allocated - old_budget + new_budget} GBP.")
+    
     # Auto-generate subaccount on approval
     if update_data.get('status') == 'active':
         current_rest = db.table('restaurants').select('twilio_subaccount_sid, name').eq('id', str(restaurant_id)).execute()
@@ -229,6 +268,30 @@ async def update_restaurant(
         
     updated_restaurant = result.data[0]
     updated_restaurant['current_month_spend'] = float(updated_restaurant.get('current_spend_gbp') or 0.0)
+    
+    # If budget was updated, log a transaction and rollup agency spend
+    if 'budget_monthly_gbp' in update_data:
+        new_bud = float(update_data.get('budget_monthly_gbp') or 0.0)
+        try:
+            db.table('transactions').insert({
+                'restaurant_id': str(restaurant_id),
+                'amount_gbp': new_bud,
+                'transaction_type': 'budget_allocation',
+                'description': f"Budget allocation updated to £{new_bud:.2f}/mo by Agency"
+            }).execute()
+        except Exception as e:
+            print(f"[WARN] Failed to write restaurant allocation transaction: {e}")
+
+        # Rollup: agency's current_spend = sum of ALL child restaurant budgets (allocated)
+        rest_data_for_agency = db.table('restaurants').select('agency_id').eq('id', str(restaurant_id)).execute()
+        if rest_data_for_agency.data and rest_data_for_agency.data[0].get('agency_id'):
+            agency_id_str = rest_data_for_agency.data[0]['agency_id']
+            try:
+                all_rests = db.table('restaurants').select('budget_monthly_gbp').eq('agency_id', agency_id_str).execute()
+                total_committed = sum(float(r.get('budget_monthly_gbp') or 0.0) for r in (all_rests.data or []))
+                db.table('agencies').update({'current_spend_gbp': total_committed}).eq('id', agency_id_str).execute()
+            except Exception as e:
+                print(f"[WARN] Failed to rollup agency committed spend: {e}")
     
     cust_res = db.table('customers').select('*', count='exact', head=True).eq('restaurant_id', str(restaurant_id)).execute()
     updated_restaurant['total_customers'] = cust_res.count or 0
