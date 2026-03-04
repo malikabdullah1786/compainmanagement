@@ -46,8 +46,11 @@ class RestaurantBase(BaseModel):
 
 
 class RestaurantCreate(RestaurantBase):
-    spending_limit_monthly: Optional[float] = None
+    budget_monthly_gbp: Optional[float] = 0.0
+    budget_daily_gbp: Optional[float] = 0.0
     status: Optional[str] = "pending"
+    creation_type: Optional[str] = "self_created"
+    created_by_agency_id: Optional[UUID] = None
 
 
 class RestaurantSignup(RestaurantBase):
@@ -59,8 +62,11 @@ class RestaurantSignup(RestaurantBase):
     admin_last_name: Optional[str] = None
     
     # Restaurant extra fields
-    spending_limit_monthly: Optional[float] = None
+    budget_monthly_gbp: Optional[float] = 0.0
+    budget_daily_gbp: Optional[float] = 0.0
     status: Optional[str] = "active"
+    creation_type: Optional[str] = "self_created"
+    created_by_agency_id: Optional[UUID] = None
 
 
 class RestaurantUpdate(BaseModel):
@@ -70,8 +76,10 @@ class RestaurantUpdate(BaseModel):
     address: Optional[str] = None
     timezone: Optional[str] = None
     status: Optional[str] = None
-    spending_limit_monthly: Optional[float] = None
+    budget_monthly_gbp: Optional[float] = None
+    budget_daily_gbp: Optional[float] = None
     twilio_subaccount_sid: Optional[str] = None
+    twilio_auth_token: Optional[str] = None
     twilio_phone_number: Optional[str] = None
 
 
@@ -79,9 +87,15 @@ class Restaurant(RestaurantBase):
     id: UUID
     status: str
     twilio_subaccount_sid: Optional[str] = None
+    twilio_auth_token: Optional[str] = None
     twilio_phone_number: Optional[str] = None
-    spending_limit_monthly: Optional[float] = None
-    current_month_spend: float
+    budget_monthly_gbp: Optional[float] = 0.0
+    budget_daily_gbp: Optional[float] = 0.0
+    current_spend_gbp: float
+    creation_type: Optional[str] = None
+    created_by_agency_id: Optional[UUID] = None
+    agency_email: Optional[str] = None
+    restaurant_admin_email: Optional[str] = None
     total_customers: int = 0
     total_messages_sent: int = 0
     created_at: datetime
@@ -207,6 +221,25 @@ class UsageRecord(BaseModel):
     total_cost: float
     breakdown: Optional[dict] = None
     created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+# ============ Transactions ============
+class TransactionBase(BaseModel):
+    amount_gbp: float
+    transaction_type: str
+    description: Optional[str] = None
+
+class TransactionCreate(TransactionBase):
+    restaurant_id: UUID
+
+class Transaction(TransactionBase):
+    id: UUID
+    restaurant_id: UUID
+    created_at: datetime
+    updated_at: datetime
 
     class Config:
         from_attributes = True

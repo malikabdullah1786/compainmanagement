@@ -46,6 +46,7 @@ interface UserProfile {
     business_name: string | null
     created_at: string
     restaurant_id?: string
+    email?: string
 }
 
 export default function AdminDashboardPage() {
@@ -87,18 +88,26 @@ export default function AdminDashboardPage() {
                 return
             }
 
-            // Load all users (excluding superadmins)
-            const { data: allUsers, error } = await supabase
-                .from('user_profiles')
-                .select('*')
-                .neq('role', 'superadmin')
-                .order('created_at', { ascending: false })
+            // We fetch the users from our new admin endpoint which has the service key 
+            // and can join auth.users to provide the email.
+            const apiUrl = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, '') || '/api';
+            const response = await fetch(`${apiUrl}/admin/users`, {
+                headers: {
+                    // Send auth token if we needed to secure the backend route, though our backend
+                    // currently doesn't check it unless we add a dependency. 
+                    // Let's pass it anyway for good measure.
+                    'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`
+                }
+            })
 
-            if (error) throw error
+            if (!response.ok) {
+                throw new Error(`Failed to fetch users from backend admin API: ${response.status}`)
+            }
 
-            const users = allUsers || []
-            setPendingUsers(users.filter(u => !u.is_verified))
-            setApprovedUsers(users.filter(u => u.is_verified))
+            const usersWithEmail = await response.json()
+
+            setPendingUsers(usersWithEmail.filter((u: UserProfile) => !u.is_verified))
+            setApprovedUsers(usersWithEmail.filter((u: UserProfile) => u.is_verified))
         } catch (err) {
             console.error('Error loading users:', err)
             toast.error('Failed to load users')
@@ -475,7 +484,7 @@ function UserTable({
         <Table>
             <TableHeader>
                 <TableRow className="border-border">
-                    <TableHead className="text-muted-foreground">Business</TableHead>
+                    <TableHead className="text-muted-foreground">Business & Email</TableHead>
                     <TableHead className="text-muted-foreground">Role</TableHead>
                     <TableHead className="text-muted-foreground">
                         {isPending ? 'Requested' : 'Approved'}
@@ -499,7 +508,12 @@ function UserTable({
                                     <p className="font-medium text-foreground">
                                         {user.business_name || 'No business name'}
                                     </p>
-                                    <p className="text-xs text-muted-foreground">
+                                    {user.email && user.email !== 'N/A (Agency or No Rest)' && (
+                                        <p className="text-xs text-muted-foreground">
+                                            {user.email}
+                                        </p>
+                                    )}
+                                    <p className="text-xs text-muted-foreground/50">
                                         ID: {user.id.slice(0, 8)}...
                                     </p>
                                 </div>

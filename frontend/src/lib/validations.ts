@@ -51,7 +51,8 @@ export const restaurantSchema = z.object({
     phone: z.string().optional(),
     address: z.string().optional(),
     timezone: z.string().default('UTC'),
-    spending_limit_monthly: z.number().positive().optional(),
+    budget_monthly_gbp: z.number().positive().optional(),
+    budget_daily_gbp: z.number().positive().optional(),
 })
 
 // Types

@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from config import get_settings
 
-from routers import agencies, restaurants, customers, campaigns, webhooks, sms, twilio, stats
+from routers import agencies, restaurants, customers, campaigns, webhooks, sms, twilio, stats, transactions, admin
 
 settings = get_settings()
 
@@ -15,7 +15,7 @@ app = FastAPI(
 # CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -30,6 +30,8 @@ app.include_router(webhooks.router, prefix="/webhooks", tags=["Webhooks"])
 app.include_router(sms.router, prefix="/sms", tags=["SMS"])
 app.include_router(twilio.router, prefix="/twilio", tags=["Twilio"])
 app.include_router(stats.router, prefix="/stats", tags=["Stats"])
+app.include_router(transactions.router, prefix="/transactions", tags=["Transactions"])
+app.include_router(admin.router, tags=["Admin"])
 
 
 @app.get("/health")

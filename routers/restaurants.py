@@ -31,6 +31,51 @@ async def signup_restaurant(
         if not user:
              raise HTTPException(status_code=400, detail='Failed to create user')
 
+        profile_res = db.table('user_profiles').select('restaurant_id').eq('id', user.user.id).execute()
+        if profile_res.data and profile_res.data[0].get('restaurant_id'):
+            restaurant_id = profile_res.data[0]['restaurant_id']
+            
+            update_data = {
+                'timezone': signup_data.timezone,
+                'address': signup_data.address,
+                'phone': signup_data.phone,
+                'budget_monthly_gbp': float(signup_data.budget_monthly_gbp or 0),
+                'budget_daily_gbp': float(signup_data.budget_daily_gbp or 0),
+                'creation_type': signup_data.creation_type,
+            }
+            if signup_data.status == 'active':
+                update_data['status'] = 'active'
+            
+            if signup_data.created_by_agency_id or signup_data.agency_id:
+                # Assign to specified agency instead of default
+                agency_id_str = str(signup_data.agency_id or signup_data.created_by_agency_id)
+                update_data['created_by_agency_id'] = agency_id_str
+                update_data['agency_id'] = agency_id_str
+                
+                # Auto-verify the user if an agency generated them
+                db.table('user_profiles').update({'is_verified': True}).eq('id', user.user.id).execute()
+
+            # Generate Twilio Subaccount if activated
+            if update_data.get('status') == 'active':
+                from services.twilio_service import create_subaccount
+                try:
+                    twilio_acc = create_subaccount(friendly_name=f"Restaurant-{signup_data.name}")
+                    update_data['twilio_subaccount_sid'] = twilio_acc['sid']
+                    update_data['twilio_auth_token'] = twilio_acc['auth_token']
+                except Exception as e:
+                    print(f"Supressed Twilio Subaccount Error: {e}")
+            
+            db.table('restaurants').update(update_data).eq('id', restaurant_id).execute()
+            
+            # Initial Budget Allocation Ledger
+            if update_data['budget_monthly_gbp'] > 0:
+                db.table('transactions').insert({
+                    'restaurant_id': restaurant_id,
+                    'amount_gbp': update_data['budget_monthly_gbp'],
+                    'transaction_type': 'budget_allocation',
+                    'description': 'Initial Monthly Budget Allocation'
+                }).execute()
+
         return {
             'message': 'Restaurant and User created successfully',
             'user_id': user.user.id,
@@ -38,8 +83,11 @@ async def signup_restaurant(
         }
 
     except Exception as e:
+        error_msg = str(e)
+        if "Database error" in error_msg:
+             error_msg = "Database error. The email address might already be in use or password is too short."
         print(f'Signup Error: {e}')
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=error_msg)
 
 
 @router.get('', response_model=List[Restaurant])
@@ -48,7 +96,7 @@ async def list_restaurants(
     status: Optional[str] = None,
     db: Client = Depends(get_db)
 ):
-    query = db.table('restaurants').select('*')
+    query = db.table('restaurants').select('*, agencies!agency_id(email), user_profiles(id, role, auth_email:id)')
     if agency_id:
         query = query.eq('agency_id', str(agency_id))
     if status:
@@ -58,6 +106,14 @@ async def list_restaurants(
     restaurants_data = result.data or []
     
     for r in restaurants_data:
+        # Resolve agency email
+        if r.get('agencies'):
+            r['agency_email'] = r['agencies'].get('email')
+        
+        # We store restaurant email directly in restaurants table since user provides it.
+        # Fallback to user auth not easily done in simple joins without RPC, but restaurants.email is present.
+        r['restaurant_admin_email'] = r.get('email')
+
         cust_res = db.table('customers').select('*', count='exact', head=True).eq('restaurant_id', r['id']).execute()
         r['total_customers'] = cust_res.count or 0
         
@@ -66,7 +122,7 @@ async def list_restaurants(
         r['total_messages_sent'] = total_msgs
         
         if 'current_month_spend' not in r:
-             r['current_month_spend'] = 0.0 
+             r['current_month_spend'] = float(r.get('current_spend_gbp') or 0.0)
              
     return restaurants_data
 
@@ -76,7 +132,24 @@ async def create_restaurant(
     restaurant: RestaurantCreate,
     db: Client = Depends(get_db)
 ):
-    result = db.table('restaurants').insert(restaurant.model_dump()).execute()
+    from services.twilio_service import create_subaccount
+
+    restaurant_data = restaurant.model_dump()
+    
+    # Agency specific overrides
+    restaurant_data['creation_type'] = 'agency_created'
+    restaurant_data['created_by_agency_id'] = str(restaurant.agency_id)
+    restaurant_data['status'] = 'active'
+    
+    # Twilio Subaccount Generation
+    try:
+        twilio_acc = create_subaccount(friendly_name=f"Restaurant-{restaurant.name}")
+        restaurant_data['twilio_subaccount_sid'] = twilio_acc['sid']
+        restaurant_data['twilio_auth_token'] = twilio_acc['auth_token']
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to create Twilio Subaccount: {str(e)}")
+
+    result = db.table('restaurants').insert(restaurant_data).execute()
     if not result.data:
         raise HTTPException(status_code=400, detail='Failed to create restaurant')
     new_restaurant = result.data[0]
@@ -84,6 +157,16 @@ async def create_restaurant(
     new_restaurant['current_month_spend'] = 0.0
     new_restaurant['total_customers'] = 0
     new_restaurant['total_messages_sent'] = 0
+
+    # Initial budget allocation ledger
+    if new_restaurant.get('budget_monthly_gbp'):
+        db.table('transactions').insert({
+            'restaurant_id': new_restaurant['id'],
+            'amount_gbp': float(new_restaurant['budget_monthly_gbp']),
+            'transaction_type': 'budget_allocation',
+            'description': 'Initial Monthly Budget Allocation'
+        }).execute()
+
     return new_restaurant
 
 
@@ -92,11 +175,15 @@ async def get_restaurant(
     restaurant_id: UUID,
     db: Client = Depends(get_db)
 ):
-    result = db.table('restaurants').select('*').eq('id', str(restaurant_id)).execute()
+    result = db.table('restaurants').select('*, agencies!agency_id(email)').eq('id', str(restaurant_id)).execute()
     if not result.data:
         raise HTTPException(status_code=404, detail='Restaurant not found')
     restaurant = result.data[0]
     
+    if restaurant.get('agencies'):
+        restaurant['agency_email'] = restaurant['agencies'].get('email')
+    restaurant['restaurant_admin_email'] = restaurant.get('email')
+
     cust_res = db.table('customers').select('*', count='exact', head=True).eq('restaurant_id', str(restaurant_id)).execute()
     restaurant['total_customers'] = cust_res.count or 0
     
@@ -104,7 +191,7 @@ async def get_restaurant(
     total_msgs = sum(record.get('messages_sent', 0) for record in (usage_res.data or []))
     restaurant['total_messages_sent'] = total_msgs
     
-    restaurant['current_month_spend'] = 0.0 
+    restaurant['current_month_spend'] = float(restaurant.get('current_spend_gbp') or 0.0)
     
     return restaurant
 
@@ -115,17 +202,33 @@ async def update_restaurant(
     restaurant: RestaurantUpdate,
     db: Client = Depends(get_db)
 ):
+    from services.twilio_service import create_subaccount
+
     update_data = restaurant.model_dump(exclude_unset=True)
     if not update_data:
         raise HTTPException(status_code=400, detail='No fields to update')
     
+    # Auto-generate subaccount on approval
+    if update_data.get('status') == 'active':
+        current_rest = db.table('restaurants').select('twilio_subaccount_sid, name').eq('id', str(restaurant_id)).execute()
+        if current_rest.data and not current_rest.data[0].get('twilio_subaccount_sid'):
+            try:
+                twilio_acc = create_subaccount(friendly_name=f"Restaurant-{current_rest.data[0]['name']}")
+                update_data['twilio_subaccount_sid'] = twilio_acc['sid']
+                update_data['twilio_auth_token'] = twilio_acc['auth_token']
+            except Exception as e:
+                import os
+                if os.getenv('ENV', 'dev').lower() == 'dev':
+                    print(f"Supressed Twilio Subaccount Error in DEV mode: {e}")
+                else:
+                    raise HTTPException(status_code=500, detail=f"Failed to create Twilio Subaccount: {str(e)}")
+
     result = db.table('restaurants').update(update_data).eq('id', str(restaurant_id)).execute()
     if not result.data:
         raise HTTPException(status_code=404, detail='Restaurant not found')
         
     updated_restaurant = result.data[0]
-    
-    updated_restaurant['current_month_spend'] = 0.0 
+    updated_restaurant['current_month_spend'] = float(updated_restaurant.get('current_spend_gbp') or 0.0)
     
     cust_res = db.table('customers').select('*', count='exact', head=True).eq('restaurant_id', str(restaurant_id)).execute()
     updated_restaurant['total_customers'] = cust_res.count or 0

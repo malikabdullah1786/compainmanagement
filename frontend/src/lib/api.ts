@@ -1,7 +1,7 @@
 import axios from 'axios'
 import { createClient } from '@/lib/supabase/client'
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+const API_URL = process.env.NEXT_PUBLIC_API_URL || '/api'
 
 const api = axios.create({
     baseURL: API_URL,
@@ -85,6 +85,11 @@ export const campaignApi = {
     preview: (id: string) => api.get(`/campaigns/${id}/preview`),
     send: (id: string) => api.post(`/campaigns/${id}/send`),
     cancel: (id: string) => api.post(`/campaigns/${id}/cancel`),
+}
+
+export const transactionApi = {
+    getRestaurantTransactions: (id: string) => api.get(`/transactions/${id}`),
+    getAgencyTransactions: (id: string) => api.get(`/transactions/agency/${id}`),
 }
 
 export default api

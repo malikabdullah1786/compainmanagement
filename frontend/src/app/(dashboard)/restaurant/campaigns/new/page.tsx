@@ -413,7 +413,7 @@ export default function NewCampaignPage() {
                                     <div className="p-4 rounded-lg bg-accent/50 border border-border">
                                         <p className="text-xs text-muted-foreground uppercase mb-1">Estimated Cost</p>
                                         <p className="text-2xl font-bold text-foreground">
-                                            ${((selectedSegmentData?.count || 0) * (calculateSegments(message).segments * 0.0079)).toFixed(2)}
+                                            €{((selectedSegmentData?.count || 0) * (calculateSegments(message).segments * 0.0079)).toFixed(2)}
                                         </p>
                                         <p className="text-xs text-muted-foreground">
                                             Based on {calculateSegments(message).segments} segment(s) per message ({calculateSegments(message).encoding})

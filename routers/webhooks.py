@@ -58,7 +58,7 @@ async def twilio_status_callback(
             if status == "sent":
                 db.rpc("increment_campaign_sent", {"campaign_id": campaign_id}).execute()
                 # Track usage
-                increment_usage(db, message.get("restaurant_id"), "sent", cost=float(price or 0))
+                increment_usage(db, message.get("restaurant_id"), "sent", cost=abs(float(price or 0)))
             elif status == "delivered":
                 db.rpc("increment_campaign_delivered", {"campaign_id": campaign_id}).execute()
                 increment_usage(db, message.get("restaurant_id"), "delivered")

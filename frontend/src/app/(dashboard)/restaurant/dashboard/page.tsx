@@ -34,7 +34,7 @@ function StatCard({ title, value, change, changeType = 'neutral', icon: Icon }: 
                 <div className="flex items-center justify-between">
                     <div className="space-y-1">
                         <p className="text-sm text-slate-400">{title}</p>
-                        <p className="text-2xl font-bold text-white">{value}</p>
+                        <p className="text-2xl font-bold text-foreground">{value}</p>
                         {change && (
                             <p className={`text-xs ${changeType === 'positive' ? 'text-emerald-400' :
                                 changeType === 'negative' ? 'text-red-400' :

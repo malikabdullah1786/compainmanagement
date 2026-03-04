@@ -1,13 +1,11 @@
-
 from fastapi import APIRouter, HTTPException, Depends, Query
 from typing import List, Optional
 from pydantic import BaseModel
 from supabase import Client
-from twilio.rest import Client as TwilioClient
 from twilio.base.exceptions import TwilioRestException
-import os
 
 from database import get_db
+from services.twilio_service import get_client, create_messaging_service
 
 router = APIRouter()
 
@@ -19,19 +17,11 @@ class AvailablePhoneNumber(BaseModel):
     region: Optional[str] = None
     postal_code: Optional[str] = None
     iso_country: Optional[str] = None
-    monthly_cost: float = 1.15 # Default Twilio cost, can be dynamic if we want
+    monthly_cost: float = 1.15 # Default Twilio cost
 
 class BuyNumberRequest(BaseModel):
     phone_number: str
     restaurant_id: str
-
-# -- Helpers --
-def get_twilio_client():
-    account_sid = os.environ.get("TWILIO_ACCOUNT_SID")
-    auth_token = os.environ.get("TWILIO_AUTH_TOKEN")
-    if not account_sid or not auth_token:
-        raise HTTPException(status_code=500, detail="Twilio credentials not configured")
-    return TwilioClient(account_sid, auth_token)
 
 # -- Endpoints --
 
@@ -43,18 +33,15 @@ async def list_available_numbers(
     db: Client = Depends(get_db)
 ):
     """
-    Search for available phone numbers on Twilio.
+    Search for available phone numbers on Twilio using the master account.
     """
-    client = get_twilio_client()
+    client = get_client()
 
     try:
-        # Search parameters
         search_params = {"limit": limit}
         if area_code:
             search_params["area_code"] = area_code
 
-        # Call Twilio API
-        # We search for Local numbers by default
         numbers = client.available_phone_numbers(country_code).local.list(**search_params)
 
         results = []
@@ -66,7 +53,7 @@ async def list_available_numbers(
                 region=num.region,
                 postal_code=num.postal_code,
                 iso_country=num.iso_country,
-                monthly_cost=1.15 # Standard US local number cost
+                monthly_cost=1.15
             ))
             
         return results
@@ -83,41 +70,69 @@ async def buy_phone_number(
     db: Client = Depends(get_db)
 ):
     """
-    Purchase a phone number from Twilio and assign it to a restaurant.
+    Purchase a phone number under the restaurant's Subaccount and deduct from ledger.
     """
-    client = get_twilio_client()
-
-    # 1. Verify Restaurant exists
-    # TODO: Add specific permission check (User owns restaurant or is admin)
-    restaurant = db.table("restaurants").select("*").eq("id", request.restaurant_id).execute()
-    if not restaurant.data:
+    restaurant_res = db.table("restaurants").select("*").eq("id", request.restaurant_id).execute()
+    if not restaurant_res.data:
          raise HTTPException(status_code=404, detail="Restaurant not found")
+         
+    restaurant = restaurant_res.data[0]
+    subaccount_sid = restaurant.get("twilio_subaccount_sid")
+    auth_token = restaurant.get("twilio_auth_token")
+    
+    if not subaccount_sid or not auth_token:
+        raise HTTPException(status_code=400, detail="Restaurant does not have a Twilio Subaccount configured.")
+
+    # Budget Check
+    cost_gbp = 1.15
+    current_spend = float(restaurant.get("current_spend_gbp") or 0)
+    budget = float(restaurant.get("budget_monthly_gbp") or 0)
+    
+    if budget > 0 and (current_spend + cost_gbp) > budget:
+        raise HTTPException(status_code=400, detail="Insufficient budget to purchase this number.")
+
+    client = get_client(subaccount_sid, auth_token)
 
     try:
-        # 2. Purchase from Twilio
-        # Note: In production, you might want to link this to a Subaccount if using them.
-        # For now, we buy on the main account.
+        # Purchase Number
         purchased_number = client.incoming_phone_numbers.create(
             phone_number=request.phone_number,
-            # sms_url="https://api.yourdomain.com/webhooks/twilio/sms", # TODO: Set this later
-            friendly_name=f"Restaurant: {restaurant.data[0]['name']}"
+            friendly_name=f"Restaurant: {restaurant['name']}"
         )
 
-        # 3. Update Database
+        ms_sid = restaurant.get("twilio_messaging_service_sid")
+        
+        # If no messaging service, create one
+        if not ms_sid:
+            ms_acc = create_messaging_service(subaccount_sid, auth_token, friendly_name=f"MS-{restaurant['name']}")
+            ms_sid = ms_acc["sid"]
+            
+        # Attach number to Messaging Service
+        client.messaging.v1.services(ms_sid).phone_numbers.create(phone_number_sid=purchased_number.sid)
+
+        # Update Database
+        new_spend = current_spend + cost_gbp
+        
         update_data = {
             "twilio_phone_number": purchased_number.phone_number,
-            "twilio_messaging_service_sid": purchased_number.sid, # Store SID here for ref, though it's not a service SID strictly
-            "settings": restaurant.data[0].get('settings', {}) or {}
+            "twilio_messaging_service_sid": ms_sid,
+            "current_spend_gbp": new_spend,
         }
-        # Add extra metadata to settings
-        update_data["settings"]["twilio_sid"] = purchased_number.sid
-        
         db.table("restaurants").update(update_data).eq("id", request.restaurant_id).execute()
+        
+        # Create Transaction Ledger Entry
+        db.table("transactions").insert({
+            "restaurant_id": request.restaurant_id,
+            "amount_gbp": -cost_gbp,  # Negative for deduction
+            "transaction_type": "number_purchase",
+            "description": f"Purchased Twilio number {purchased_number.phone_number}"
+        }).execute()
 
         return {
-            "message": "Phone number purchased successfully", 
+            "message": "Phone number purchased & attached successfully", 
             "phone_number": purchased_number.phone_number,
-            "sid": purchased_number.sid
+            "sid": purchased_number.sid,
+            "messaging_service_sid": ms_sid
         }
 
     except TwilioRestException as e:

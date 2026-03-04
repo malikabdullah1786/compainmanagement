@@ -21,6 +21,7 @@ import {
     Save,
     ExternalLink,
 } from 'lucide-react'
+import { TwilioNumberPicker } from '@/components/agency/twilio-number-picker'
 
 interface RestaurantSettings {
     name: string
@@ -254,9 +255,23 @@ export default function SettingsPage() {
 
                             <div className="p-4 rounded-lg bg-indigo-500/10 border border-indigo-500/30">
                                 <p className="text-sm text-indigo-300">
-                                    <strong>Need to change SMS settings?</strong> Contact your agency administrator to update Twilio configuration or adjust your monthly limits.
+                                    <strong>Need to adjust limits?</strong> Contact your agency administrator to adjust your monthly SMS limits.
                                 </p>
                             </div>
+
+                            {!settings?.twilio_phone_number && (
+                                <div className="mt-8 border-t border-border pt-8">
+                                    <h3 className="text-lg font-medium text-foreground mb-4">Get a Dedicated Number</h3>
+                                    <TwilioNumberPicker
+                                        restaurantId={restaurantId || undefined}
+                                        onSelect={(number) => {
+                                            if (settings) {
+                                                setSettings({ ...settings, twilio_phone_number: number })
+                                            }
+                                        }}
+                                    />
+                                </div>
+                            )}
                         </CardContent>
                     </Card>
                 </TabsContent>

@@ -184,6 +184,7 @@ export default function RestaurantsPage() {
                             <TableRow className="border-border hover:bg-muted/50">
                                 <TableHead className="text-muted-foreground">Restaurant</TableHead>
                                 <TableHead className="text-muted-foreground">Status</TableHead>
+                                <TableHead className="text-muted-foreground">Creator</TableHead>
                                 <TableHead className="text-muted-foreground">Customers</TableHead>
                                 <TableHead className="text-muted-foreground">Messages</TableHead>
                                 <TableHead className="text-muted-foreground">Spending</TableHead>
@@ -193,7 +194,7 @@ export default function RestaurantsPage() {
                         <TableBody>
                             {filteredRestaurants.length === 0 ? (
                                 <TableRow>
-                                    <TableCell colSpan={6} className="text-center py-12 text-muted-foreground">
+                                    <TableCell colSpan={7} className="text-center py-12 text-muted-foreground">
                                         <Building2 className="mx-auto h-12 w-12 text-muted/30 mb-3" />
                                         <p>No restaurants found</p>
                                     </TableCell>
@@ -201,7 +202,7 @@ export default function RestaurantsPage() {
                             ) : (
                                 filteredRestaurants.map((restaurant: any) => {
                                     const spending = restaurant.current_month_spend || 0
-                                    const limit = restaurant.spending_limit_monthly || 1000 // Default limit if null
+                                    const limit = restaurant.budget_monthly_gbp || 1000 // Default limit if null
                                     const spendPercent = limit > 0 ? (spending / limit) * 100 : 0
 
                                     // Status color fallback
@@ -234,6 +235,16 @@ export default function RestaurantsPage() {
                                                 </Badge>
                                             </TableCell>
                                             <TableCell>
+                                                <div className="flex flex-col gap-1">
+                                                    <span className="text-sm font-medium text-foreground">
+                                                        {restaurant.creation_type === 'agency_created' ? 'Agency' : 'Self Signed Up'}
+                                                    </span>
+                                                    <span className="text-xs text-muted-foreground truncate max-w-[120px]" title={restaurant.creation_type === 'agency_created' ? restaurant.agency_email : restaurant.restaurant_admin_email}>
+                                                        {restaurant.creation_type === 'agency_created' ? restaurant.agency_email : restaurant.restaurant_admin_email}
+                                                    </span>
+                                                </div>
+                                            </TableCell>
+                                            <TableCell>
                                                 <div className="flex items-center gap-2 text-foreground/80">
                                                     <Users className="h-4 w-4 text-muted-foreground" />
                                                     {(restaurant.total_customers || 0).toLocaleString()}
@@ -248,8 +259,8 @@ export default function RestaurantsPage() {
                                             <TableCell>
                                                 <div className="space-y-1">
                                                     <div className="flex items-center justify-between text-sm">
-                                                        <span className="text-foreground">${spending.toFixed(2)}</span>
-                                                        <span className="text-muted-foreground">${limit}</span>
+                                                        <span className="text-foreground">€{spending.toFixed(2)}</span>
+                                                        <span className="text-muted-foreground">€{limit}</span>
                                                     </div>
                                                     <div className="w-24 h-1.5 bg-muted rounded-full overflow-hidden">
                                                         <div

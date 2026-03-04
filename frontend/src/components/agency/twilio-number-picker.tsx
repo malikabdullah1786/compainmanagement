@@ -15,6 +15,7 @@ import { twilioApi, restaurantApi } from '@/lib/api'
 
 interface TwilioNumberPickerProps {
     onSelect?: (number: string) => void
+    restaurantId?: string
 }
 
 interface AvailableNumber {
@@ -31,7 +32,7 @@ interface Restaurant {
     name: string
 }
 
-export function TwilioNumberPicker({ onSelect }: TwilioNumberPickerProps) {
+export function TwilioNumberPicker({ onSelect, restaurantId }: TwilioNumberPickerProps) {
     const [areaCode, setAreaCode] = useState('')
     const [isSearching, setIsSearching] = useState(false)
     const [numbers, setNumbers] = useState<AvailableNumber[]>([])
@@ -43,12 +44,14 @@ export function TwilioNumberPicker({ onSelect }: TwilioNumberPickerProps) {
 
     // Restaurant selection
     const [restaurants, setRestaurants] = useState<Restaurant[]>([])
-    const [selectedRestaurantId, setSelectedRestaurantId] = useState<string>('')
+    const [selectedRestaurantId, setSelectedRestaurantId] = useState<string>(restaurantId || '')
     const [isLoadingRestaurants, setIsLoadingRestaurants] = useState(false)
 
     useEffect(() => {
-        loadRestaurants()
-    }, [])
+        if (!restaurantId) {
+            loadRestaurants()
+        }
+    }, [restaurantId])
 
     async function loadRestaurants() {
         setIsLoadingRestaurants(true)
@@ -231,30 +234,40 @@ export function TwilioNumberPicker({ onSelect }: TwilioNumberPickerProps) {
                                 </div>
                                 <div className="mt-4 pt-4 border-t border-border flex justify-between">
                                     <span className="text-muted-foreground">Monthly cost</span>
-                                    <span className="text-foreground font-medium">${selectedNumberData.monthly_cost.toFixed(2)}/month</span>
+                                    <span className="text-foreground font-medium">€{selectedNumberData.monthly_cost.toFixed(2)}/month</span>
                                 </div>
                             </div>
 
-                            {/* Restaurant Selection */}
-                            <div className="space-y-2">
-                                <Label className="text-foreground">Assign to Restaurant</Label>
-                                <Select value={selectedRestaurantId} onValueChange={setSelectedRestaurantId}>
-                                    <SelectTrigger className="bg-background border-border text-foreground">
-                                        <SelectValue placeholder="Select a restaurant" />
-                                    </SelectTrigger>
-                                    <SelectContent className="bg-card border-border text-foreground">
-                                        {restaurants.map((r) => (
-                                            <SelectItem key={r.id} value={r.id} className="focus:bg-accent focus:text-foreground">
-                                                {r.name}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                                <p className="text-xs text-muted-foreground">
-                                    <Store className="inline h-3 w-3 mr-1" />
-                                    The number will be used for this restaurant's campaigns.
-                                </p>
-                            </div>
+                            {/* Restaurant Selection (Only for Agency) */}
+                            {!restaurantId && (
+                                <div className="space-y-2">
+                                    <Label className="text-foreground">Assign to Restaurant</Label>
+                                    <Select value={selectedRestaurantId} onValueChange={setSelectedRestaurantId}>
+                                        <SelectTrigger className="bg-background border-border text-foreground">
+                                            <SelectValue placeholder="Select a restaurant" />
+                                        </SelectTrigger>
+                                        <SelectContent className="bg-card border-border text-foreground">
+                                            {restaurants.map((r) => (
+                                                <SelectItem key={r.id} value={r.id} className="focus:bg-accent focus:text-foreground">
+                                                    {r.name}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                    <p className="text-xs text-muted-foreground">
+                                        <Store className="inline h-3 w-3 mr-1" />
+                                        The number will be used for this restaurant's campaigns.
+                                    </p>
+                                </div>
+                            )}
+                            {restaurantId && (
+                                <div className="p-3 bg-indigo-500/10 border border-indigo-500/30 rounded-lg">
+                                    <p className="text-sm text-indigo-300">
+                                        <Store className="inline h-4 w-4 mr-2" />
+                                        This number will be assigned to your restaurant directly.
+                                    </p>
+                                </div>
+                            )}
                         </div>
                     )}
 

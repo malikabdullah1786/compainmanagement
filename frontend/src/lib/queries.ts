@@ -1,7 +1,7 @@
 'use client'
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { agencyApi, restaurantApi, customerApi, campaignApi } from './api'
+import { agencyApi, restaurantApi, customerApi, campaignApi, transactionApi } from './api'
 
 // ============ Agency Queries ============
 export function useAgencies() {
@@ -299,5 +299,27 @@ export function useCancelCampaign() {
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['campaigns'] })
         },
+    })
+}
+
+// ============ Transaction Queries ============
+export interface Transaction {
+    id: string
+    restaurant_id: string
+    amount_gbp: number
+    transaction_type: 'campaign_send' | 'number_purchase' | 'subscription_fee' | 'budget_allocation'
+    description: string
+    created_at: string
+}
+
+export function useRestaurantTransactions(restaurantId: string | null) {
+    return useQuery({
+        queryKey: ['transactions', restaurantId],
+        queryFn: async () => {
+            if (!restaurantId) return []
+            const { data } = await transactionApi.getRestaurantTransactions(restaurantId)
+            return data as Transaction[]
+        },
+        enabled: !!restaurantId,
     })
 }

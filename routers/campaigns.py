@@ -7,6 +7,7 @@ from datetime import datetime, timezone, timedelta
 from database import get_db
 from models.schemas import Campaign, CampaignCreate, CampaignUpdate, CampaignPreview, Customer
 from services.campaign_service import send_campaign, get_campaign_recipients, cancel_campaign_messages
+from services.sms_utils import calculate_segments, estimate_cost
 
 router = APIRouter()
 
@@ -141,12 +142,15 @@ async def preview_campaign(
         campaign_data.get("segment_criteria")
     )
     
-    estimated_cost = len(recipients) * 0.0079
+    message_template = campaign_data.get("message_template", "")
+    segment_info = calculate_segments(message_template)
+    
+    estimated = estimate_cost(segment_info["segments"], len(recipients))
     
     return CampaignPreview(
         total_recipients=len(recipients),
         sample_recipients=recipients[:10],
-        estimated_cost=round(estimated_cost, 4)
+        estimated_cost=estimated
     )
 
 

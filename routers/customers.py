@@ -154,7 +154,7 @@ async def import_customers_csv(
         raise HTTPException(status_code=400, detail="File must be a CSV")
     
     content = await file.read()
-    decoded = content.decode('utf-8')
+    decoded = content.decode('utf-8-sig')
     reader = csv.DictReader(io.StringIO(decoded))
     
     imported = 0
@@ -162,8 +162,10 @@ async def import_customers_csv(
     errors = []
     total_rows = 0
     
-    for row in reader:
+    for raw_row in reader:
         total_rows += 1
+        # Strip whitespace from keys to handle headers like " first_name" or "email "
+        row = {k.strip(): v for k, v in raw_row.items() if k is not None}
         try:
             phone = row.get('phone', '').strip()
             if not phone:

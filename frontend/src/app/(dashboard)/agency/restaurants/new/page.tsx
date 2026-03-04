@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { ArrowLeft, Loader2, Building2, MapPin, Mail, Phone, Clock, DollarSign } from 'lucide-react'
+import { ArrowLeft, Loader2, Building2, MapPin, Mail, Phone, Clock, Euro } from 'lucide-react'
 import { z } from 'zod'
 import { restaurantApi, agencyApi } from '@/lib/api'
 
@@ -29,7 +29,7 @@ const formSchema = z.object({
     phone: z.string().optional(),
     address: z.string().optional(),
     timezone: z.string().min(1),
-    spending_limit_monthly: z.string().optional().refine((val) => !val || !isNaN(parseFloat(val)), {
+    budget_monthly_gbp: z.string().optional().refine((val) => !val || !isNaN(parseFloat(val)), {
         message: "Must be a valid number"
     }),
     // New Admin Fields
@@ -92,8 +92,8 @@ export default function NewRestaurantPage() {
         setIsSubmitting(true)
         try {
             // Convert spending limit to float or null
-            const spendingLimit = data.spending_limit_monthly
-                ? parseFloat(data.spending_limit_monthly)
+            const budgetMonthlyGbp = data.budget_monthly_gbp
+                ? parseFloat(data.budget_monthly_gbp)
                 : null
 
             // Use the SIGNUP endpoint instead of create
@@ -105,8 +105,9 @@ export default function NewRestaurantPage() {
                 // Actually RestaurantSignup inherits RestaurantBase which HAS agency_id.
                 // So we MUST pass agency_id.
                 agency_id: agencyId,
-                spending_limit_monthly: spendingLimit,
-                status: 'active'
+                budget_monthly_gbp: budgetMonthlyGbp,
+                status: 'active',
+                creation_type: 'agency_created'
             })
 
             toast.success('Restaurant and Admin User created successfully!')
@@ -297,15 +298,15 @@ export default function NewRestaurantPage() {
 
                             <div className="space-y-2">
                                 <Label htmlFor="spending_limit" className="text-foreground flex items-center gap-2">
-                                    <DollarSign className="h-4 w-4 text-muted-foreground" />
-                                    Monthly Spending Limit
+                                    <Euro className="h-4 w-4 text-muted-foreground" />
+                                    Monthly Budget (€)
                                 </Label>
                                 <Input
                                     id="spending_limit"
                                     type="number"
                                     placeholder="e.g., 500"
                                     className="bg-background border-border text-foreground placeholder:text-muted-foreground/50"
-                                    {...register('spending_limit_monthly')}
+                                    {...register('budget_monthly_gbp')}
                                 />
                                 <p className="text-xs text-muted-foreground">Leave empty for no limit</p>
                             </div>

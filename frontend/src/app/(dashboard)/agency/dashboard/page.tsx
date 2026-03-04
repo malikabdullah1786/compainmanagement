@@ -77,7 +77,7 @@ export default function AgencyDashboard() {
         },
         {
             title: 'Monthly Revenue',
-            value: agencyStats?.monthly_revenue?.value ? `$${agencyStats.monthly_revenue.value.toLocaleString()}` : '$0.00',
+            value: agencyStats?.monthly_revenue?.value ? `€${agencyStats.monthly_revenue.value.toLocaleString()}` : '€0.00',
             change: agencyStats?.monthly_revenue?.change || '+0%',
             icon: DollarSign,
             color: 'from-amber-500 to-amber-600',

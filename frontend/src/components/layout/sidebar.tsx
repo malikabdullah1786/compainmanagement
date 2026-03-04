@@ -16,7 +16,7 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'
+import { Sheet, SheetContent, SheetTrigger, SheetTitle } from '@/components/ui/sheet'
 import {
     LayoutDashboard,
     MessageSquare,
@@ -30,6 +30,7 @@ import {
     ChevronRight,
     BarChart3,
     Send,
+    CreditCard,
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -47,6 +48,7 @@ const restaurantNavItems: NavItem[] = [
     { title: 'Messages', href: '/restaurant/messages', icon: Send },
     { title: 'Customers', href: '/restaurant/customers', icon: Users },
     { title: 'Schedule', href: '/restaurant/schedule', icon: Calendar },
+    { title: 'Transactions', href: '/restaurant/transactions', icon: CreditCard },
     { title: 'Settings', href: '/restaurant/settings', icon: Settings },
 ]
 
@@ -204,6 +206,7 @@ export function Sidebar({ userRole, userEmail, businessName }: SidebarProps) {
                     </Button>
                 </SheetTrigger>
                 <SheetContent side="left" className="w-64 p-0 bg-sidebar border-sidebar-border">
+                    <SheetTitle className="sr-only">Menu</SheetTitle>
                     <NavContent />
                 </SheetContent>
             </Sheet>

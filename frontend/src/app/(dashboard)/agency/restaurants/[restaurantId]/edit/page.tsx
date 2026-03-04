@@ -29,7 +29,7 @@ const formSchema = z.object({
     phone: z.string().optional(),
     address: z.string().optional(),
     timezone: z.string().min(1),
-    spending_limit_monthly: z.string().optional().refine((val) => !val || !isNaN(parseFloat(val)), {
+    budget_monthly_gbp: z.string().optional().refine((val) => !val || !isNaN(parseFloat(val)), {
         message: "Must be a valid number"
     }),
     status: z.enum(['active', 'suspended', 'pending'])
@@ -72,7 +72,7 @@ export default function EditRestaurantPage() {
                 phone: restaurant.phone || '',
                 address: restaurant.address || '',
                 timezone: restaurant.timezone || 'America/New_York',
-                spending_limit_monthly: restaurant.spending_limit_monthly?.toString() || '',
+                budget_monthly_gbp: restaurant.budget_monthly_gbp?.toString() || '',
                 status: restaurant.status as 'active' | 'suspended' | 'pending'
             })
         }
@@ -81,20 +81,21 @@ export default function EditRestaurantPage() {
     async function onSubmit(data: FormInput) {
         setIsSubmitting(true)
         try {
-            const spendingLimit = data.spending_limit_monthly
-                ? parseFloat(data.spending_limit_monthly)
+            const budgetMonthlyGbp = data.budget_monthly_gbp
+                ? parseFloat(data.budget_monthly_gbp)
                 : null
 
             await restaurantApi.update(restaurantId, {
                 ...data,
-                spending_limit_monthly: spendingLimit,
+                budget_monthly_gbp: budgetMonthlyGbp,
             })
 
             toast.success('Restaurant updated successfully!')
             router.push(`/agency/restaurants/${restaurantId}`)
-        } catch (error) {
+        } catch (error: any) {
             console.error('Error updating restaurant:', error)
-            toast.error('Failed to update restaurant')
+            const msg = error.response?.data?.detail || 'Failed to update restaurant'
+            toast.error(msg)
         } finally {
             setIsSubmitting(false)
         }
@@ -191,12 +192,12 @@ export default function EditRestaurantPage() {
                         </div>
 
                         <div className="space-y-2 pt-2">
-                            <Label htmlFor="spending_limit">Monthly Spending Limit</Label>
+                            <Label htmlFor="spending_limit">Monthly Budget (€)</Label>
                             <Input
                                 id="spending_limit"
                                 type="number"
                                 placeholder="e.g., 500"
-                                {...register('spending_limit_monthly')}
+                                {...register('budget_monthly_gbp')}
                             />
                         </div>
                     </CardContent>

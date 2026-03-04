@@ -72,6 +72,33 @@ def increment_usage(db: Client, restaurant_id: str, metric: str, cost: float = 0
         
         db.table("usage_records").update(update_data).eq("id", record_id).execute()
         
+        if metric == "sent" and cost > 0:
+            db.table("transactions").insert({
+                "restaurant_id": restaurant_id,
+                "amount_gbp": -cost,
+                "transaction_type": "campaign_send",
+                "description": "SMS Campaign Send Cost"
+            }).execute()
+            
+            rest_res = db.table("restaurants").select("current_spend_gbp, budget_monthly_gbp, twilio_subaccount_sid").eq("id", restaurant_id).execute()
+            if rest_res.data:
+                rest_data = rest_res.data[0]
+                current_spend = float(rest_data.get("current_spend_gbp") or 0.0)
+                new_spend = current_spend + cost
+                budget = float(rest_data.get("budget_monthly_gbp") or 0.0)
+                
+                db.table("restaurants").update({
+                    "current_spend_gbp": new_spend
+                }).eq("id", restaurant_id).execute()
+                
+                # Suspend subaccount if limit is exceeded
+                if budget > 0 and new_spend >= budget:
+                    logger.warning(f"Budget exceeded for {restaurant_id}! Suspending subaccount.")
+                    sub_sid = rest_data.get("twilio_subaccount_sid")
+                    if sub_sid:
+                        from services.twilio_service import suspend_subaccount
+                        suspend_subaccount(sub_sid)
+        
     except Exception as e:
         logger.error(f"Failed to increment usage for {restaurant_id}: {e}")
 
@@ -79,20 +106,18 @@ def check_monthly_limit(db: Client, restaurant_id: str, estimated_cost: float) -
     """Check if the estimated cost would exceed the monthly limit."""
     try:
         # Get restaurant limit
-        restaurant_res = db.table("restaurants").select("monthly_sms_limit").eq("id", restaurant_id).execute()
+        restaurant_res = db.table("restaurants").select("budget_monthly_gbp, current_spend_gbp").eq("id", restaurant_id).execute()
         if not restaurant_res.data:
             return False 
             
-        limit = restaurant_res.data[0].get("monthly_sms_limit")
+        limit = restaurant_res.data[0].get("budget_monthly_gbp")
+        current_cost = float(restaurant_res.data[0].get("current_spend_gbp") or 0.0)
+        
         # No limit set = unlimited
-        if limit is None:
+        if limit is None or float(limit) <= 0:
             return True
             
         limit = float(limit)
-            
-        # Get current usage
-        record = get_current_usage_record(db, restaurant_id)
-        current_cost = float(record.get("total_cost", 0.0))
         
         if current_cost + estimated_cost > limit:
             logger.warning(f"Monthly limit reached for {restaurant_id}. Limit: {limit}, Current: {current_cost}, Estimated: {estimated_cost}")
